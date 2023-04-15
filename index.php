@@ -12,51 +12,88 @@ $conn = new mysqli($servername, $username, $password, $dbname);
 if ($conn->connect_error) {
     die("Connection failed: " . $conn->connect_error);
 }
+# function to retrieve events from the events table.
+function getEvents($conn, $eventIds) {
+    $events = array();
 
-# Select all types of events from the "all_events" table.
-$sql = "SELECT * FROM all_events LIMIT 10";
-$result = mysqli_query($conn, $sql);
+    $eventIdsString = implode(',', $eventIds);
+    $sql = "SELECT * FROM events WHERE event_id IN ($eventIdsString) ORDER BY event_date DESC";
+    $result = mysqli_query($conn, $sql);
 
-if (isset($result) && mysqli_num_rows($result) > 0) {
-    $events = array(); 
-
-    while($row = mysqli_fetch_assoc($result)) {
-        # events.
-        if($row['event_type'] == 1){
-            $get_only_events = "SELECT * FROM events where event_id=$row[event_id] ORDER BY event_date DESC";
-            $only_events_result = mysqli_query($conn, $get_only_events);
-            if ($only_events_result && mysqli_num_rows($only_events_result) > 0) {
-                $event_row = mysqli_fetch_assoc($only_events_result);
-                $event = new stdClass();
-                $event->type = 'event';
-                $event->name = $event_row["event_name"];
-                $event->date = $event_row["event_date"];
-                $event->description = $event_row["event_description"];
-                $events[] = $event;
-            }
+    if ($result && mysqli_num_rows($result) > 0) {
+        while($row = mysqli_fetch_assoc($result)) {
+            $event = new stdClass();
+            $event->type = 'event';
+            $event->name = $row["event_name"];
+            $event->date = $row["event_date"];
+            $event->description = $row["event_description"];
+            $events[] = $event;
         }
-        #lectures
-        elseif($row['event_type'] == 2){
-            $get_only_lecturers = "SELECT * FROM lectures where lecture_id=$row[event_id] ORDER BY lecture_date DESC";
-            $only_lectures_result = mysqli_query($conn, $get_only_lecturers);
-            if ($only_lectures_result && mysqli_num_rows($only_lectures_result) > 0) {
-                $lecture_row = mysqli_fetch_assoc($only_lectures_result);
-                $lecture = new stdClass();
-                $lecture->type = 'lecture';
-                $lecture->name = $lecture_row["lecture_name"];
-                $lecture->date = $lecture_row["lecture_date"];
-                $lecture->lecturer_name = ($lecture_row["lecturer_name"] ? strtoupper($lecture_row["lecturer_name"]) : '') ;
-                $lecture->description = $lecture_row["lecture_description"];
-                $events[] = $lecture;
-            }
-        }
-    
     }
-    echo json_encode($events);
 
-} else {
-    echo "No events found.";
+    return $events;
 }
+
+# function to retrieve lectures from the lectures table.
+function getLectures($conn, $lectureIds) {
+    $lectures = array();
+
+    $lectureIdsString = implode(',', $lectureIds);
+    $sql = "SELECT * FROM lectures WHERE lecture_id IN ($lectureIdsString) ORDER BY lecture_date DESC";
+    $result = mysqli_query($conn, $sql);
+
+    if ($result && mysqli_num_rows($result) > 0) {
+        while($row = mysqli_fetch_assoc($result)) {
+            $lecture = new stdClass();
+            $lecture->type = 'lecture';
+            $lecture->name = $row["lecture_name"];
+            $lecture->date = $row["lecture_date"];
+            $lecture->lecturer_name = ($row["lecturer_name"] ? strtoupper($row["lecturer_name"]) : '') ;
+            $lecture->description = $row["lecture_description"];
+            $lectures[] = $lecture;
+        }
+    }
+
+    return $lectures;
+}
+
+# function to build events from the "all_events" table.
+function buildEvents($conn) {
+    $sql = "SELECT * FROM all_events LIMIT 10";
+    $result = mysqli_query($conn, $sql);
+
+    if (isset($result) && mysqli_num_rows($result) > 0) {
+        $events = array();
+        $eventIds = array();
+        $lectureIds = array();
+
+        while($row = mysqli_fetch_assoc($result)) {
+            if($row['event_type'] == 1){
+                $eventIds[] = $row['event_id'];
+            }
+            elseif($row['event_type'] == 2){
+                $lectureIds[] = $row['event_id'];
+            }
+        }
+
+        # events from the events table.
+        if (!empty($eventIds)) {
+            $events = array_merge($events, getEvents($conn, $eventIds));
+        }
+
+        # lectures from the lectures table.
+        if (!empty($lectureIds)) {
+            $events = array_merge($events, getLectures($conn, $lectureIds));
+        }
+
+        echo json_encode($events);
+
+    } else {
+        echo "No events found.";
+    }
+}
+
+buildEvents($conn);
 
 mysqli_close($conn);
 
